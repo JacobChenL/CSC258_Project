@@ -38,6 +38,7 @@
     yellow: .word 0xfff86b
     white: .word 0xffffff
     black : .word 0x000000
+    background: .word 0x00ffdd
     birdBlock: .word 1688,1696,1816,1820,1824,1828,1944,1952	# set 1x10008000 as 0, it means the index of unit that bird is at
     lowerk: .word 0xffff006a
     newline: .asciiz "\n"
@@ -47,6 +48,21 @@
 .globl main
 
 main:
+
+ChangeBackground:
+  lw $t0, displayAddress
+  lw $t1, background
+  li $t2, 0        		# Initialize beginning  
+  li $t3, 1024     		# Initialize end  
+  
+start_loop_1:  
+  beq $t2, $t3, end_loop 
+  sw $t1, $t2($t1)	        # paint the  t2th unit red.  
+  
+  addi $t2, $t2, 1    		# Increment counter  
+  b start_loop_1  
+end_loop:        
+ 
 
 StartSeting:
     la $a1, birdBlock		# $a1 = &birdBlock or birdBlock[0]
