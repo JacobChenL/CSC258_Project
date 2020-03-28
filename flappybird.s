@@ -34,15 +34,13 @@
 #####################################################################
 .data 
     displayAddress: .word  0x10008000
-    green: .word 0x4bff7b
     yellow: .word 0xfff86b
     white: .word 0xffffff
     black : .word 0x000000
-    background: .word 0x00ffdd
+    blue: .word 0x8ac1ff
     birdBlock: .word 1688,1696,1816,1820,1824,1828,1944,1952	# set 1x10008000 as 0, it means the index of unit that bird is at
-    lowerk: .word 0xffff006a
-    newline: .asciiz "\n"
-    keyStore: .word 0xffff0004
+    green: .word 0x1eb319
+    obstacle: .space 104
 
 .text
 .globl main
@@ -51,18 +49,19 @@ main:
 
 ChangeBackground:
   lw $t0, displayAddress
-  lw $t1, background
+  lw $t1, blue
   li $t2, 0        		# Initialize beginning  
   li $t3, 1024     		# Initialize end  
   
 start_loop_1:  
-  beq $t2, $t3, end_loop 
-  sw $t1, $t2($t1)	        # paint the  t2th unit red.  
+  beq $t2, $t3, StartSeting
+  add $t4, $t2, $t2
+  add $t4, $t4, $t4
+  add $t5, $t4, $t0
+  sw $t1, 0($t5)	        # paint the  t2th unit red.  
   
   addi $t2, $t2, 1    		# Increment counter  
-  b start_loop_1  
-end_loop:        
- 
+  b start_loop_1     
 
 StartSeting:
     la $a1, birdBlock		# $a1 = &birdBlock or birdBlock[0]
@@ -74,6 +73,11 @@ INITDONE:
         li $v0, 30      	# call getTime(), $a0 = lower 32 bits, $a1 = upper 32 bits
         syscall
         move $t1,$a0		# $t1 = lower 32 bits (in millisecond)
+        li $v0, 42
+        li $a1, 24
+        syscall
+        li $t1, 0
+        j initObstacle
     GAMEON:			
         bne $t0, 0, GAMEOVER	# if $t0 !=0, GAMEOVER
         checkMove1:
@@ -83,12 +87,12 @@ INITDONE:
             beqz $t3, checkMove2 # if $t3 == 0, jump to checkMove2
             lw $t5, 4($t4)	# else $t3 has a value, $t5 = the keyboard input
             la $a1, birdBlock	# $a1 = &birdBlock
-            li $a2, -128	# $a2 = -128, the direction of moving to up
+            li $a2, -256	# $a2 = -128, the direction is moving up, move up 2 units.
             beq $t5, 102, Move	# if $t5 = 102 ( the keyboard input == 'f', jump to Move
             j checkMove2	# else the keyboard input != 'f', jump to checkMove2
             
         checkMove2:
-            addi $t2, $t1, 500	# set time interval as 0.5 sec, $t2 is future time
+            addi $t2, $t1, 250	# set time interval as 0.25 sec, $t2 is future time
             li $v0, 30		# get time again
             syscall
             la $a1, birdBlock	# $a1 = birdBlock and pass it to the code block
@@ -129,7 +133,7 @@ Move:
         li $t1, 0		# Index of the loop
         li $t2, 0		# Index of the birdBlock array
         lw $t3, displayAddress	# $t3 = displayAddress
-        lw $t4, black		# $t4 = black
+        lw $t4, blue		# $t4 = black
     REMOVEBIRD:
         beq $t1, 8, REMOVEDONE	# if $t1 = 8, Done
         addi $t1, $t1, 1	# $t1 = $t1 + 1
@@ -162,7 +166,23 @@ drop:
     DROPDONE:
         j setBird		# jump to setBird to draw the bird at new position
         
-        
+initObstable:
+    OBINIT:
+        li $t2, 0
+        la $t3, obstacle
+        addi $t4, $a0, 8
+    GETOB:
+        bge $t2, 32, INITDONE
+        addi $t2, $t2, 1
+        bge $t2, $a0, CHECKEMP
+    OBCONTINUE:
+    	
+    
+    
+    CHECKEMP:
+        blt $t2, $t4, GETOB
+        j OBCONTINUE
+    
     
 
         
