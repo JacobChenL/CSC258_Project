@@ -5,7 +5,7 @@
 #
 # Group members:
 # - Student 1: Litao Chen, 1004545842
-# - Student 2 (if any): Name, Student Number
+# - Student 2: Kamran Badirov, 1005506971
 #
 # Bitmap Display Configuration:
 # - Unit width in pixels: 8					     
@@ -37,9 +37,11 @@
     white: .word 0xffffff
     black : .word 0x000000
     blue: .word 0x8ac1ff
+    red:  .word 0xfc0303
     birdBlock: .word 1688,1696,1816,1820,1824,1828,1944,1952	# set 1x10008000 as 0, it means the index of unit that bird is at
     green: .word 0x1eb319
-    obstacle: .space 1664
+    obstacle: .space 416
+    timer: .space 8
     newline: .asciiz "\n"
 
 .text
@@ -55,8 +57,7 @@ ChangeBackground:		# $t0, $t1, $t2, $t3 used
   
 start_loop_1:  			# $t0, $t1, $t2, $t3, $t4, $t5 used
   beq $t2, $t3, INITDONE
-  add $t4, $t2, $t2
-  add $t4, $t4, $t4
+  sll $t4, $t2, 2
   add $t5, $t4, $t0
   sw $t1, 0($t5)	        # paint the  t2th unit red.  
   
@@ -66,20 +67,87 @@ start_loop_1:  			# $t0, $t1, $t2, $t3, $t4, $t5 used
 				
 
 INITDONE:
+    li $t0, 0		# $t0 = 0 game continue, $t0 = 1 game ends
+    li $v0, 30      	# call getTime(), $a0 = lower 32 bits, $a1 = upper 32 bits
+    syscall
+    move $t1,$a0		# $t1 = lower 32 bits (in millisecond)
+        
+    addi $t9, $t1, 100
+    addi $sp, $sp, -4
+    sw $t9, 0($sp)
+    
     li $v0, 42
     li $a1, 25
     syscall
     jal initObstacle
     la $a1, birdBlock		# $a1 = &birdBlock or birdBlock[0]
-    j setBird			# initial the position of bird
+    jal setBird			# initial the position of bird
+    
     GAMEINIT:			# A while loop
         li $t0, 0		# $t0 = 0 game continue, $t0 = 1 game ends
         li $v0, 30      	# call getTime(), $a0 = lower 32 bits, $a1 = upper 32 bits
         syscall
         move $t1,$a0		# $t1 = lower 32 bits (in millisecond)
-    GAMEON:			
+        
+        addi $t2, $t1, 250
+        la $t3, timer
+        sw $t1, 0($t3)
+        sw $t2, 4($t3)
+    GAMEON:
         bne $t0, 0, GAMEOVER	# if $t0 !=0, GAMEOVER
+        
+        #lw $t9, 0($sp)
+        #addi $sp, $sp, 4
+        
+        #li $t0, 0		# $t0 = 0 game continue, $t0 = 1 game ends
+        #li $v0, 30      	# call getTime(), $a0 = lower 32 bits, $a1 = upper 32 bits
+        #syscall
+        #move $t1,$a0		# $t1 = lower 32 bits (in millisecond)
+        
+        #bgt $t1,$t9, MOVEOB1
+        #addi $sp, $sp,4
+        #sw $t9,0($sp)
+        #j checkMove1
+        #MOVEOB1:
+        #li $v0, 42
+        #li $a1, 25
+        #syscall
+        #addi $t9, $t1, 100
+        #addi $sp, $sp, -4
+        #sw $t9, 0($sp)
+        #jal moveObstacle
+        checkCollision:
+        	  li $t0, 0		# Index of the loop
+      		  li $t1, 0		# Index of the birdBlock array
+      		  li $t2, 0		# INdex of Obstacle array
+      		  la $a2, obstacle      # $a2 = obstacle[0]
+		  outter_loop:  
+  			beq $t0, 8, checkCollision 
+			sll $t3, $t1, 2 	# $t3 = 4 * $t1 (index)
+        		add $t4, $a1, $t3	# $t4 = &birdBlock + 4 * Index
+			######################## Inner loop  
+ 				 li $t5, 0        # Initialize beginning  
+ 				 li $t6, 104      # Initialize end  
+				 inner_loop:  
+  				 beq $t5, $t6, end_loop 
+ 				 sll $t7,$t2, 2      # $t7= 4* obstacle array
+ 				 add $t8, $a2,$t7    # $t8 = &obsacle + 4*array index 
+ 				 addi $t2, $t2, 1    # Increment counter  
+ 				 addi $t5, $t5, 1     # increment inner loop
+ 				 beq $t4, $t8,  GAMEOVER        #check if birdblock and obstacle collide  
+ 				 b inner_loop   
+				end_loop:  
+				######################## Inner loop  
+
+  				addi $t0, $t0, 1    # Increment counter  
+ 				b  outter_loop
+
+
+        
         checkMove1:
+            la $t3, timer
+            lw $t1, 0($t3)
+            lw $t2, 4($t3)
             lui $t4, 0xffff	# $t4 = first few bit of keyboard address
             lw $t3, 0($t4)	# $t3 = 0xffff0000
             andi $t3, $t3, 0x1  # $t3 = $t3(int)
@@ -87,23 +155,41 @@ INITDONE:
             lw $t5, 4($t4)	# else $t3 has a value, $t5 = the keyboard input
             la $a1, birdBlock	# $a1 = &birdBlock
             li $a2, -256	# $a2 = -128, the direction is moving up, move up 2 units.
-            beq $t5, 102, Move	# if $t5 = 102 ( the keyboard input == 'f', jump to Move
+            
+            beq $t5, 102, setMove	# if $t5 = 102 ( the keyboard input == 'f', jump to Move
             j checkMove2	# else the keyboard input != 'f', jump to checkMove2
             
         checkMove2:
-            addi $t2, $t1, 250	# set time interval as 0.25 sec, $t2 is future time
             li $v0, 30		# get time again
             syscall
             la $a1, birdBlock	# $a1 = birdBlock and pass it to the code block
             li $a2, 128		# represent the same colume but next row
-            bge $a0, $t2, Move	# if current time is larger than futrue game, call  remove
+            bge $a0, $t2, setMove	# if current time is larger than futrue game, call  remove
             j checkMove1	# jump to checkMove1
-        j GAMEON		# jump to the beginning of the loop
+        setMove:
+            jal Move
+        j GAMEINIT		# jump to the beginning of the loop
     
     
     
     GAMEOVER:
-        li $v0, 10
+   	 lw $t0, displayAddress
+ 	 lw $t1, red
+	 li $t2, 0        		
+ 	 li $t3, 1024    
+        
+          loop:  			# $t0, $t1, $t2, $t3, $t4, $t5 used
+ 		 beq $t2, $t3, Quit
+ 		 sll $t4, $t2, 2
+ 		 add $t5, $t4, $t0
+  		 sw $t1, 0($t5)	        # paint the  t2th unit red.  
+    
+ 		 addi $t2, $t2, 1    		# Increment counter  
+  		 b start_loop_1     
+				# $t0, $t1, $t2, $t3, $t4, $t5 freed		
+       
+ Quit:
+         li $v0, 10
         syscall
 
 
@@ -125,7 +211,31 @@ drawBird:
         addi $t2, $t2, 1	# Index = Index + 1
         j GETBIRD
     DRAWDONE:
-        j GAMEINIT
+        lw $t9, 0($sp)
+        addi $sp, $sp, 4
+        
+        li $t0, 0		# $t0 = 0 game continue, $t0 = 1 game ends
+        li $v0, 30      	# call getTime(), $a0 = lower 32 bits, $a1 = upper 32 bits
+        syscall
+        move $t1,$a0		# $t1 = lower 32 bits (in millisecond)
+        
+        bgt $t1,$t9, MOVEOB
+        addi $sp, $sp,4
+        sw $t9,0($sp)
+        j ALLDONE
+    MOVEOB:
+        li $v0, 42
+        li $a1, 25
+        syscall
+        addi $t9, $t1, 100
+        addi $sp, $sp, -4
+        sw $t9, 0($sp)
+        move $v1, $ra
+        jal moveObstacle
+        move $ra, $v1
+    ALLDONE:
+        
+        jr $ra
         
 Move:
     REMOVEINIT:
@@ -206,7 +316,7 @@ initObstacle:
 drawObstacle:
     
     DOBINIT:
-        lw $t0, displayAddress	# $t0 = &displayAddress[0]
+        lw $t9, displayAddress	# $t0 = &displayAddress[0]
     	li $t4, 0		# loop index $t4 = 0
     	la $t5, obstacle	# $t5 = &obstacle
     	lw $t6, green
@@ -218,7 +328,7 @@ drawObstacle:
         add $t7, $t5, $t7	# $t7 = &Obstacle[$t4]
         lw $t8, 0($t7)		# $t8 = value of Obstacle[$t4]
         
-        add $t8, $t8, $t0	# $t8 = a certain index on displayAddress
+        add $t8, $t8, $t9	# $t8 = a certain index on displayAddress
         sw $t6, 0($t8)		# load green color onto the index of displayAddress
         addi $t4,$t4,1		# index $t4 = $t4 + 1
         j DOBLOOP		
@@ -226,4 +336,39 @@ drawObstacle:
          jr $ra			# return to main code
         
         
-    
+moveObstacle:
+
+    MOBINIT:
+        li $t1, 0		# Loop index
+        la $t2, obstacle
+        lw $t9, displayAddress
+        lw $t8, blue
+        
+        lw $t3, 0($t2)
+        beq $t3, $zero, REPAINT
+    MOBLOOP:
+        beq $t1, 104, drawObstacle
+        li $t3, 4
+        add $t3, $t1, $t1
+        add $t3, $t3, $t3
+        add $t3, $t2,$t3
+        lw $t4, 0($t3)
+        add $t5, $t9, $t4
+        sw $t8, 0($t5)
+        addi $t4,$t4, -4
+        sw $t4, 0($t3)
+        addi $t1, $t1, 1
+        j MOBLOOP
+    REPAINT:
+        beq $t1, 104, initObstacle
+        li $t3, 4
+        add $t3, $t1, $t1
+        add $t3, $t3, $t3
+        add $t3, $t2,$t3
+        lw $t4, 0($t3)
+        add $t5, $t9, $t4
+        sw $t8, 0($t5)
+        addi $t1, $t1, 1
+        j REPAINT
+        
+        
