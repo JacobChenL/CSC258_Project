@@ -20,10 +20,12 @@
 # - Milestone 1
 # - Milestone 2
 # - Milestone 3
+# - Milestone 4
 # Which approved additional features have been implemented?
 # (See the assignment handout for the list of additional features)
-# 1. (fill in the feature, if any)
-# 2. (fill in the feature, if any)
+# 1. Feature 2: More realistic physics, the more times you fly in a row, the more flying strength you will get 
+#               if you keep dropping, the droping speed will increase by time.
+# 2. Feature 4: Changing the game difficulty, when game goes furthur. The speed of obstacle will increase until it reaches its limit.
 # 3. (fill in the feature, if any)
 # ... (add more if necessary)
 #
@@ -45,8 +47,11 @@
     obstacleEdge: .space 128
     mapEdge: .word 
     newline: .asciiz "\n"
-    upspeed: .space 8
-    dropspeed: .space 8
+    upspeed: .space 4
+    dropspeed: .space 4
+    obstacleSpeed: .space 4
+    beginingTime: .space 4
+    bye: .word 0,128,256,260,264,268,272,280,384,392,400,404,408,512,516,520,536,656,660,664
         lostMessage: .asciiz "Flappy bird died :(`.."
 
 .text
@@ -69,15 +74,21 @@ start_loop_1:  			# $t0, $t1, $t2, $t3, $t4, $t5 used
   addi $t2, $t2, 1    		# Increment counter  
   b start_loop_1     
 				# $t0, $t1, $t2, $t3, $t4, $t5 freed
-				
+							
 
 INITDONE:
     li $t0, 0		# $t0 = 0 game continue, $t0 = 1 game ends
     li $v0, 30      	# call getTime(), $a0 = lower 32 bits, $a1 = upper 32 bits
     syscall
     move $t1,$a0		# $t1 = lower 32 bits (in millisecond)
+    
+    la $t2, beginingTime
+    sb $t1, 0($t2)
+    li $t4, 100
+    la $t5, obstacleSpeed
+    sb $t4, 0($t5)
         
-    addi $t9, $t1, 100
+    add $t9, $t1, $t4
     addi $sp, $sp, -4
     sw $t9, 0($sp)
     
@@ -88,6 +99,13 @@ INITDONE:
     
     la $a1, birdBlock		# $a1 = &birdBlock or birdBlock[0]
     jal setBird			# initial the position of bird
+    
+    la $t1, upspeed
+    la $t2, dropspeed
+    li $t3, 1
+    sb $t3, 0($t2)
+    li $t3, -1
+    sb $t3, 0($t1)
     GAMEINIT:			# A while loop
         li $t0, 0		# $t0 = 0 game continue, $t0 = 1 game ends
         li $v0, 30      	# call getTime(), $a0 = lower 32 bits, $a1 = upper 32 bits
@@ -109,9 +127,9 @@ INITDONE:
             beqz $t3, checkMove2 # if $t3 == 0, jump to checkMove2
             lw $t5, 4($t4)	# else $t3 has a value, $t5 = the keyboard input
             la $a1, birdBlock	# $a1 = &birdBlock
-            li $a2, -128	# $a2 = -128, the direction is moving up, move up 2 units.
             
-            beq $t5, 102, setMove	# if $t5 = 102 ( the keyboard input == 'f', jump to Move
+            
+            beq $t5, 102, setMove1	# if $t5 = 102 ( the keyboard input == 'f', jump to Move
             j checkMove2	# else the keyboard input != 'f', jump to checkMove2
             
         checkMove2:
@@ -119,9 +137,29 @@ INITDONE:
             syscall
             la $a1, birdBlock	# $a1 = birdBlock and pass it to the code block
             li $a2, 128		# represent the same colume but next row
-            bge $a0, $t2, setMove	# if current time is larger than futrue game, call  remove
+            bge $a0, $t2, setMove2	# if current time is larger than futrue game, call  remove
             j checkMove1	# jump to checkMove1
+        setMove1:
+            la $t6,upspeed
+            la $t7,dropspeed
+            li $t8, 1
+            sb $t8,0($t7)
+            lb $t8,0($t6)
+            addi $t8,$t8,-1
+            sb $t8,0($t6)
+            j setMove
+        setMove2:
+            la $t6,upspeed
+            la $t7,dropspeed
+            li $t8, -1
+            sb $t8,0($t6)
+            lb $t8,0($t7)
+            addi $t8,$t8,1
+            sb $t8,0($t7)
         setMove:
+            li $t9, 128
+            mult $t9,$t8
+            mflo $a2
             jal Move
             jal checkCollision
         j GAMEINIT		# jump to the beginning of the loop
@@ -135,7 +173,7 @@ INITDONE:
  	 li $t3, 1024    
         
           loop:  			# $t0, $t1, $t2, $t3, $t4, $t5 used
- 		 beq $t2, $t3, ByeMessage
+ 		 beq $t2, $t3, ByeScene
  		 sll $t4, $t2, 2
  		 add $t5, $t4, $t0
   		 sw $t1, 0($t5)	        # paint the  t2th unit red.  
@@ -143,11 +181,23 @@ INITDONE:
   		 b loop     
 				# $t0, $t1, $t2, $t3, $t4, $t5 freed		
 	
-ByeMessage:				
-	
-	li $v0, 55 #syscall value for dialog
-	la $a0, lostMessage #get message
-	syscall
+
+		ByeScene:	
+		  li $t1,0	
+        	  la $t2, bye
+	 	  lw, $t0, displayAddress
+		  lw, $t6, yellow
+		  BYELOOP:
+		      bge $t1, 20, Quit
+		      add $t3, $t1,$t1	
+     		      add $t3, $t3, $t3
+     		      add $t3,$t2,$t3
+       		      lw $t4, 0($t3)
+       		      add $t4, $t4, $t0
+       		      sw  $t6, 0($t4)
+		      addi $t1, $t1, 1	# $t1 = $t1 + 1
+        	      j BYELOOP			
+
 
  Quit:
         li $v0, 10
@@ -187,7 +237,14 @@ drawBird:
         li $v0, 42
         li $a1, 25
         syscall
-        addi $t9, $t1, 100
+        la $t2,beginingTime
+        lb $t3, 0($t2)
+        addi $t3, $t4,1000
+        la $t4,obstacleSpeed
+        lb $t5, 0($t4)
+        bge $t1, $t3, ADDSPEED
+    KEEPMOVE:
+        add $t9, $t1, $t5
         addi $sp, $sp, -4
         sw $t9, 0($sp)
         move $v1, $ra
@@ -198,7 +255,14 @@ drawBird:
         li $a0, 50
         syscall
         jr $ra
-        
+    
+    ADDSPEED:
+        li $t6,30
+        beq $t6,$t5,KEEPMOVE
+        sb $t1,0($t2)
+        addi $t5,$t5,-10
+        sb $t5, 0($t4)
+        j KEEPMOVE
 Move:
     REMOVEINIT:
         li $t1, 0		# Index of the loop
